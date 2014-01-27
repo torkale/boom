@@ -15,8 +15,10 @@
 package commands
 
 import (
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -63,6 +65,35 @@ func TestQps(t *testing.T) {
 	time.AfterFunc(time.Second, func() {
 		if count > 1 {
 			t.Errorf("Expected to boom 1 times, found %v", count)
+		}
+		wg.Done()
+	})
+	go boom.Run()
+	wg.Wait()
+}
+
+func TestBody(t *testing.T) {
+	var wg sync.WaitGroup
+	var count int64
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		body, _ := ioutil.ReadAll(r.Body)
+		if string(body) == "Body" {
+			atomic.AddInt64(&count, int64(1))
+		}
+	}
+	server := httptest.NewServer(http.HandlerFunc(handler))
+	defer server.Close()
+
+	req, _ := http.NewRequest("GET", server.URL, strings.NewReader("Body"))
+	boom := &Boom{
+		Req: req,
+		N:   20,
+		C:   2,
+	}
+	wg.Add(1)
+	time.AfterFunc(time.Second, func() {
+		if count != 20 {
+			t.Errorf("Expected to boom 20 times, found %v", count)
 		}
 		wg.Done()
 	})
